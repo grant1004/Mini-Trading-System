@@ -1,0 +1,29 @@
+# Build folders
+build/
+Debug/
+Release/
+x64/
+.vs/
+
+# Visual Studio files
+*.vcxproj.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+
+# Compiled files
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
