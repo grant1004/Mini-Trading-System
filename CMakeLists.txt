@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-
+if(WIN32)
+    add_compile_options(/utf-8)
+endif()
 # 設定 CMake 政策
 cmake_policy(SET CMP0167 NEW)  # 使用新的 Boost 查找方式
 
