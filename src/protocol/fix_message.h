@@ -1,14 +1,10 @@
+// ============================================================================
+// 1. fix_message.h - 純粹的 FIX 協議載體
+// ============================================================================
 #pragma once
 #include <string>
 #include <map>
-#include <vector>
-
-// 前向宣告，避免循環引用
-namespace mts {
-namespace core {
-    enum class Side : char;
-}
-}
+#include <optional>
 
 namespace mts {
 namespace protocol {
@@ -16,12 +12,13 @@ namespace protocol {
 using FieldTag = int;
 using FieldValue = std::string;
 
+// 🎯 核心設計理念：FixMessage 是純粹的資料載體
 class FixMessage {
 public:
     static constexpr char SOH = '\x01';  // FIX 分隔符
     
-    // 常用 FIX Tags
-    enum Tags {
+    // FIX 標準 Tags（只定義協議層面的）
+    enum StandardTags {
         BeginString = 8,
         BodyLength = 9,
         MsgType = 35,
@@ -29,98 +26,65 @@ public:
         TargetCompID = 56,
         MsgSeqNum = 34,
         SendingTime = 52,
-        CheckSum = 10,
-        
-        // 訂單相關
-        ClOrdID = 11,      // Client Order ID
-        Symbol = 55,
-        Side = 54,
-        OrderQty = 38,
-        OrdType = 40,
-        Price = 44,
-        TimeInForce = 59,
-        
-        // 執行回報
-        ExecID = 17,
-        ExecType = 150,
-        OrdStatus = 39,
-        LeavesQty = 151,
-        CumQty = 14
+        CheckSum = 10
     };
     
-    // 訊息類型
-    enum MsgTypes {
-        NewOrderSingle = 'D',
-        ExecutionReport = '8',
-        OrderCancelRequest = 'F',
+    // 標準訊息類型（協議層面）
+    enum StandardMsgTypes {
+        Heartbeat = '0',
+        TestRequest = '1',
         Logon = 'A',
         Logout = '5',
-        Heartbeat = '0',
-        TestRequest = '1'
+        NewOrderSingle = 'D',
+        ExecutionReport = '8',
+        OrderCancelRequest = 'F'
     };
-    
+
 private:
     std::map<FieldTag, FieldValue> fields_;
-    
+
 public:
-    // 建構函式
+    // ===== 核心功能：解析與序列化 =====
     FixMessage() = default;
-    explicit FixMessage(char msgType);
     
-    // 解析 FIX 訊息
+    // 從原始字串解析
     static FixMessage parse(const std::string& rawMessage);
     
-    // 建構 FIX 訊息
+    // 序列化為 FIX 字串
     std::string serialize() const;
-    
-    // 欄位操作
+
+    // ===== 欄位操作 =====
     void setField(FieldTag tag, const FieldValue& value);
     FieldValue getField(FieldTag tag) const;
+    std::optional<FieldValue> getFieldOptional(FieldTag tag) const;
     bool hasField(FieldTag tag) const;
+    void removeField(FieldTag tag);
     
-    // 訊息驗證
-    bool isValid() const;
-    
-    // ===== 原始的輔助方法（會拋出異常）=====
-    char getMsgType() const;
-    std::string getSymbol() const;
-    mts::core::Side getSide() const;
-    double getPrice() const;
-    uint64_t getQuantity() const;
-    
-    // ===== 新增：安全的 Or 方法（不會拋出異常）=====
-    char getMsgTypeOr(char defaultValue = '?') const noexcept;
-    std::string getSymbolOr(const std::string& defaultValue = "") const noexcept;
-    double getPriceOr(double defaultValue = 0.0) const noexcept;
-    uint64_t getQuantityOr(uint64_t defaultValue = 0) const noexcept;
-    
-    // 便利方法
-    bool isNewOrder() const { return getMsgTypeOr() == NewOrderSingle; }
-    bool isExecutionReport() const { return getMsgTypeOr() == ExecutionReport; }
-    bool isLogon() const { return getMsgTypeOr() == Logon; }
-    
-    // 字串表示
-    std::string toString() const;
-    
-    // 靜態工廠方法
-    static FixMessage createNewOrderSingle(
-        const std::string& clOrdId,
-        const std::string& symbol,
-        char side,
-        const std::string& orderQty,
-        char ordType,
-        const std::string& price = "");
-        
-    static FixMessage createExecutionReport(
-        const std::string& orderID,
-        const std::string& execID,
-        char execType,
-        char ordStatus,
-        const std::string& symbol,
-        char side,
-        const std::string& leavesQty,
-        const std::string& cumQty);
-};
+    // 取得所有欄位（用於偵錯）
+    const std::map<FieldTag, FieldValue>& getAllFields() const { return fields_; }
 
-} // namespace protocol
-} // namespace mts
+    // ===== 基本驗證 =====
+    bool isValid() const;
+    std::pair<bool, std::string> validateWithDetails() const;
+    bool validateChecksum() const;
+
+    // ===== 便利方法（協議層面的）=====
+    std::optional<char> getMsgType() const;
+    std::optional<std::string> getSenderCompID() const;
+    std::optional<std::string> getTargetCompID() const;
+    std::optional<int> getMsgSeqNum() const;
+
+    // 訊息類型判斷
+    bool isAdminMessage() const;  // 系統管理訊息
+    bool isApplicationMessage() const;  // 業務應用訊息
+
+    // ===== 工具方法 =====
+    std::string toString() const;
+    size_t getFieldCount() const { return fields_.size(); }
+
+private:
+    // 內部輔助方法
+    std::string calculateChecksum(const std::string& messageBody) const;
+    std::string getCurrentFixTimestamp() const;
+    bool validateRequiredFields() const;
+};
