@@ -278,7 +278,7 @@ std::vector<TradePtr> OrderBook::matchLimitOrder(OrderPtr order) {
         notifyOrderUpdate(bestOpposite);
         notifyTrade(trade);
         
-        // 如果對手單完全成交，從 Order Book 中移除
+        //如果對手單完全成交，從 Order Book 中移除 
         if (bestOpposite->isFilled()) {
             oppositeSide.removeOrder(bestOpposite->getOrderId());
         }
