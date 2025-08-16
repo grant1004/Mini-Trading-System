@@ -4,9 +4,16 @@
 #pragma once
 #include <string>
 #include <map>
+#include <queue>
+#include <vector>
+#include <memory>
+#include <mutex>
+#include <functional>
+#include <limits>
 #include <optional>
 
 namespace mts {
+
 namespace protocol {
 
 using FieldTag = int;
@@ -31,6 +38,7 @@ public:
     
     // 標準訊息類型（協議層面）
     enum StandardMsgTypes {
+
         Heartbeat = '0',
         TestRequest = '1',
         Logon = 'A',
@@ -38,6 +46,7 @@ public:
         NewOrderSingle = 'D',
         ExecutionReport = '8',
         OrderCancelRequest = 'F'
+    
     };
 
 private:
@@ -46,9 +55,13 @@ private:
 public:
     // ===== 核心功能：解析與序列化 =====
     FixMessage() = default;
+    FixMessage(char msgType);
     
     // 從原始字串解析
     static FixMessage parse(const std::string& rawMessage);
+
+    // 🆕 從原始字串解析 (不驗證 checksum，測試用)
+    static FixMessage parseUnsafe(const std::string& rawMessage);
     
     // 序列化為 FIX 字串
     std::string serialize() const;
@@ -87,4 +100,13 @@ private:
     std::string calculateChecksum(const std::string& messageBody) const;
     std::string getCurrentFixTimestamp() const;
     bool validateRequiredFields() const;
+    // 🆕 內部解析方法，可控制是否驗證 checksum
+    static FixMessage parseWithValidation(const std::string& rawMessage, bool validateChecksum);
+    std::string buildMessageWithoutChecksum() const ;
+    std::string buildBodyContent() const ;
 };
+
+
+} // namespace mts::protocol
+
+} // namespace mts
