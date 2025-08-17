@@ -212,7 +212,7 @@ void TradingSystem::handleNewConnection(SOCKET clientSocket) {
         }
         
         std::cout << "✅ FIX Session created for client " << clientSocket 
-                  << " (" << senderCompID << " -> " << targetCompID << ")" << std::endl;
+                  << " (" << senderCompID << " -> dynamic)" << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "❌ Error handling new connection " << clientSocket 
