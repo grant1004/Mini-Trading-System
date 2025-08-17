@@ -5,7 +5,7 @@
 
 int main() {
     try {
-        TCPServer server(8080);
+        mts::tcp_server::TCPServer server(8080);
         
         if (!server.start()) {
             std::cerr << "Failed to start server" << std::endl;

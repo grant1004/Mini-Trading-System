@@ -96,7 +96,7 @@ FixMessage FixMessage::parseWithValidation(const std::string& rawMessage, bool v
     // FIX_PARSE_DEBUG("Starting to parse FIX message of length: " << rawMessage.length() 
     //                << " (validateChecksum=" << (validateChecksum ? "YES" : "NO") << ")");
     
-    if (rawMessage.empty()) {
+    if (rawMessage.empty() || rawMessage == "" ) {
         // FIX_PARSE_DEBUG("ERROR: Empty FIX message");
         throw std::runtime_error("Empty FIX message");
     }
@@ -163,23 +163,23 @@ FixMessage FixMessage::parseWithValidation(const std::string& rawMessage, bool v
     // FIX_PARSE_DEBUG("Parse completed. Total fields: " << msg.getFieldCount());
     
     // 🎯 關鍵改進：解析後立即驗證 checksum
-    // if (validateChecksum) {
-    //     FIX_PARSE_DEBUG("Performing checksum validation...");
+    if (validateChecksum) {
+        FIX_PARSE_DEBUG("Performing checksum validation...");
         
-    //     if (!msg.hasField(CheckSum)) {
-    //         FIX_PARSE_DEBUG("ERROR: Missing CheckSum field");
-    //         throw std::runtime_error("FIX message missing CheckSum field");
-    //     }
+        if (!msg.hasField(CheckSum)) {
+            FIX_PARSE_DEBUG("ERROR: Missing CheckSum field");
+            throw std::runtime_error("FIX message missing CheckSum field");
+        }
         
-    //     if (!msg.validateChecksum()) {
-    //         FIX_PARSE_DEBUG("ERROR: Checksum validation failed");
-    //         throw std::runtime_error("FIX message checksum validation failed");
-    //     }
+        if (!msg.validateChecksum()) {
+            FIX_PARSE_DEBUG("ERROR: Checksum validation failed");
+            throw std::runtime_error("FIX message checksum validation failed");
+        }
         
-    //     FIX_PARSE_DEBUG("Checksum validation PASSED");
-    // } else {
-    //     // FIX_PARSE_DEBUG("Skipping checksum validation (unsafe mode)");
-    // }
+        FIX_PARSE_DEBUG("Checksum validation PASSED");
+    } else {
+        // FIX_PARSE_DEBUG("Skipping checksum validation (unsafe mode)");
+    }
     
     return msg;
 }

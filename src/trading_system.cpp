@@ -4,6 +4,20 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+   
+    
+
+
+
+TradingSystem::TradingSystem(int port) 
+    : serverPort_(port) {
+    std::cout << "🌐 Trading System created on port " << port << std::endl;
+}
+
+TradingSystem:: ~TradingSystem(){
+    stop();
+    std::cout << "🧹 Trading System destroyed" << std::endl;
+}
 
 // ===== 系統生命週期 =====
 
@@ -86,6 +100,7 @@ bool TradingSystem::initializeMatchingEngine() {
     }
 }
 
+
 bool TradingSystem::initializeTcpServer() {
     try {
         std::cout << "🌐 初始化增強版 TCP 服務器..." << std::endl;
@@ -93,25 +108,25 @@ bool TradingSystem::initializeTcpServer() {
         // 建立增強版 TCP 服務器
         tcpServer_ = std::make_unique<TCPServer>(serverPort_);
         
-        // 設定連線回調
-        tcpServer_->setConnectionCallback([this](int clientId) {
-            std::cout << "🎉 新客戶端連線: " << clientId << std::endl;
-            handleNewConnection(clientId);
+        // 🔄 修改：連線回調參數改為 SOCKET
+        tcpServer_->setConnectionCallback([this](SOCKET clientSocket) {  // 改為 SOCKET
+            std::cout << "🎉 新客戶端連線: " << clientSocket << std::endl;
+            handleNewConnection(clientSocket);
         });
         
-        // 設定訊息回調 - 這是關鍵!
-        tcpServer_->setMessageCallback([this](int clientId, const std::string& message) {
-            std::cout << "📨 收到客戶端 " << clientId << " 訊息: " << message << std::endl;
-            handleClientMessage(clientId, message);
+        // 🔄 修改：訊息回調參數改為 SOCKET
+        tcpServer_->setMessageCallback([this](SOCKET clientSocket, const std::string& message) {  // 改為 SOCKET
+            std::cout << "📨 收到客戶端 " << clientSocket << " 訊息: " << message << std::endl;
+            handleClientMessage(clientSocket, message);
         });
         
-        // 設定斷線回調
-        tcpServer_->setDisconnectionCallback([this](int clientId) {
-            std::cout << "📴 客戶端斷線: " << clientId << std::endl;
-            handleClientDisconnection(clientId);
+        // 🔄 修改：斷線回調參數改為 SOCKET
+        tcpServer_->setDisconnectionCallback([this](SOCKET clientSocket) {  // 改為 SOCKET
+            std::cout << "📴 客戶端斷線: " << clientSocket << std::endl;
+            handleClientDisconnection(clientSocket);
         });
         
-        // 設定錯誤回調
+        // 錯誤回調保持不變
         tcpServer_->setErrorCallback([this](const std::string& error) {
             std::cerr << "🚨 TCP 服務器錯誤: " << error << std::endl;
         });
@@ -132,66 +147,89 @@ bool TradingSystem::initializeTcpServer() {
     }
 }
 
-// ===== TCP 連線處理 =====
 
-void TradingSystem::handleNewConnection(int clientSocket) {
+// ===== TCP 連線處理 =====
+void TradingSystem::handleNewConnection(SOCKET clientSocket) {
     std::cout << "📞 New client connected: " << clientSocket << std::endl;
     
     try {
+        // 更新統計
+        totalConnections_.fetch_add(1);
+        
         // 建立 FIX Session
-        auto fixSession = std::make_unique<FixSession>("SERVER", "CLIENT");
+        std::string senderCompID = "SERVER";
+        std::string targetCompID = "CLIENT_" + std::to_string(static_cast<int64_t>(clientSocket));
+        
+        auto fixSession = std::make_unique<FixSession>(senderCompID, targetCompID);
         
         // 設定 FIX Session 回調
         fixSession->setApplicationMessageHandler(
             [this, clientSocket](const FixMessage& msg) {
-                handleFixApplicationMessage(clientSocket, msg);
+                try {
+                    handleFixApplicationMessage(clientSocket, msg);
+                } catch (const std::exception& e) {
+                    std::cerr << "❌ Error in application message handler: " << e.what() << std::endl;
+                }
             }
         );
         
         fixSession->setErrorHandler(
             [this, clientSocket](const std::string& error) {
-                std::cerr << "Session " << clientSocket << " error: " << error << std::endl;
+                std::cerr << "🚨 Session " << clientSocket << " error: " << error << std::endl;
+                // 可以考慮在嚴重錯誤時斷開連線
             }
         );
         
+        // 設定發送函式
         fixSession->setSendFunction(
             [this, clientSocket](const std::string& message) -> bool {
-                // 這裡需要你的 TCPServer 支援發送到特定客戶端
-                // 目前先用 cout 模擬
-                std::cout << "📤 Sending to " << clientSocket << ": " << message << std::endl;
-                return true;
+                if (!tcpServer_ || !tcpServer_->isRunning()) {
+                    std::cerr << "❌ TCP Server not available" << std::endl;
+                    return false;
+                }
+                
+                try {
+                    return tcpServer_->sendMessage(clientSocket, message);
+                } catch (const std::exception& e) {
+                    std::cerr << "❌ Send error: " << e.what() << std::endl;
+                    return false;
+                }
             }
         );
         
-        // 建立客戶端處理執行緒
-        auto handlerThread = new std::thread([this, clientSocket, &fixSession]() {
-            // 簡化的訊息處理迴圈
-            while (running_.load()) {
-                // 這裡需要從 socket 讀取資料
-                // 目前先用模擬
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        });
+        // 設定心跳間隔
+        fixSession->setHeartbeatInterval(std::chrono::seconds(30));
         
-        // 保存 Session
+        // 建立並保存 Session
+        std::string clientInfo = "Socket_" + std::to_string(static_cast<int64_t>(clientSocket));
+        
         {
             std::lock_guard<std::mutex> lock(sessionsMutex_);
             sessions_[clientSocket] = std::make_unique<ClientSession>(
-                std::move(fixSession), handlerThread
+                std::move(fixSession), 
+                clientInfo
             );
         }
         
+        std::cout << "✅ FIX Session created for client " << clientSocket 
+                  << " (" << senderCompID << " -> " << targetCompID << ")" << std::endl;
+        
     } catch (const std::exception& e) {
-        std::cerr << "Error handling new connection: " << e.what() << std::endl;
+        std::cerr << "❌ Error handling new connection " << clientSocket 
+                  << ": " << e.what() << std::endl;
+        
+        // 清理可能已建立的資源
+        cleanupSession(clientSocket);
     }
 }
 
-void TradingSystem::handleClientDisconnection(int clientSocket) {
+
+void TradingSystem::handleClientDisconnection(SOCKET clientSocket) {  // 參數類型改為 SOCKET
     std::cout << "📴 Client disconnected: " << clientSocket << std::endl;
     cleanupSession(clientSocket);
 }
 
-void TradingSystem::handleClientMessage(int clientSocket, const std::string& rawMessage) {
+void TradingSystem::handleClientMessage(SOCKET clientSocket, const std::string& rawMessage) {
     std::lock_guard<std::mutex> lock(sessionsMutex_);
     
     auto it = sessions_.find(clientSocket);
@@ -210,7 +248,7 @@ void TradingSystem::handleClientMessage(int clientSocket, const std::string& raw
 
 // ===== FIX 訊息處理 =====
 
-void TradingSystem::handleFixApplicationMessage(int clientSocket, const FixMessage& fixMsg) {
+void TradingSystem::handleFixApplicationMessage(SOCKET clientSocket, const FixMessage& fixMsg) {
     auto msgType = fixMsg.getMsgType();
     if (!msgType) {
         std::cerr << "Invalid message type from client " << clientSocket << std::endl;
@@ -234,7 +272,7 @@ void TradingSystem::handleFixApplicationMessage(int clientSocket, const FixMessa
     }
 }
 
-void TradingSystem::handleNewOrderSingle(int clientSocket, const FixMessage& fixMsg) {
+void TradingSystem::handleNewOrderSingle(SOCKET clientSocket, const FixMessage& fixMsg) {
     try {
         std::cout << "📋 Processing New Order Single from client " << clientSocket << std::endl;
         
@@ -255,7 +293,7 @@ void TradingSystem::handleNewOrderSingle(int clientSocket, const FixMessage& fix
     }
 }
 
-void TradingSystem::handleOrderCancelRequest(int clientSocket, const FixMessage& fixMsg) {
+void TradingSystem::handleOrderCancelRequest(SOCKET clientSocket, const FixMessage& fixMsg) {
     try {
         std::cout << "❌ Processing Order Cancel Request from client " << clientSocket << std::endl;
         
@@ -343,7 +381,7 @@ void TradingSystem::handleMatchingEngineError(const std::string& error) {
 
 // ===== 訊息轉換 =====
 
-std::shared_ptr<Order> TradingSystem::convertFixToOrder(const FixMessage& fixMsg, int clientSocket) {
+std::shared_ptr<Order> TradingSystem::convertFixToOrder(const FixMessage& fixMsg, SOCKET clientSocket) {
     // 提取 FIX 欄位
     std::string clOrdId = fixMsg.getField(11);      // ClOrdID
     std::string symbol = fixMsg.getField(55);       // Symbol
@@ -430,14 +468,12 @@ FixMessage TradingSystem::convertReportToFix(const ExecutionReportPtr& report) {
 
 // ===== 發送方法 =====
 
-bool TradingSystem::sendFixMessage(int clientSocket, const FixMessage& fixMsg) {
+bool TradingSystem::sendFixMessage(SOCKET clientSocket, const FixMessage& fixMsg) {
     try {
         std::string serialized = fixMsg.serialize();
         std::cout << "📤 Sending FIX message to client " << clientSocket << ": " << serialized << std::endl;
         
-        // 這裡需要你的 TCPServer 支援發送到特定客戶端
-        // 目前先模擬成功
-        return true;
+        return tcpServer_->sendMessage(static_cast<SOCKET>(clientSocket), serialized);
         
     } catch (const std::exception& e) {
         std::cerr << "Error sending FIX message: " << e.what() << std::endl;
@@ -445,7 +481,7 @@ bool TradingSystem::sendFixMessage(int clientSocket, const FixMessage& fixMsg) {
     }
 }
 
-void TradingSystem::sendOrderReject(int clientSocket, const FixMessage& originalMsg, const std::string& reason) {
+void TradingSystem::sendOrderReject(SOCKET clientSocket, const FixMessage& originalMsg, const std::string& reason) {
     try {
         std::cout << "❌ Sending Order Reject to client " << clientSocket << ": " << reason << std::endl;
         
@@ -509,15 +545,9 @@ char TradingSystem::getFixOrdStatus(OrderStatus status) {
     }
 }
 
-std::shared_ptr<Order> TradingSystem::findOrderById(OrderID orderId) {
-    // 這裡需要從 MatchingEngine 或維護一個本地快取
-    // 簡化實作，返回 nullptr
-    return nullptr;
-}
-
 // ===== 清理方法 =====
 
-void TradingSystem::cleanupSession(int clientSocket) {
+void TradingSystem::cleanupSession(SOCKET clientSocket) {
     std::lock_guard<std::mutex> lock(sessionsMutex_);
     sessions_.erase(clientSocket);
 }

@@ -24,7 +24,7 @@ void monitoringThread() {
         std::this_thread::sleep_for(std::chrono::seconds(10));
         
         if (g_tradingSystem && g_tradingSystem->isRunning()) {
-            g_tradingSystem->printStatistics();
+            // g_tradingSystem->printStatistics();
         }
     }
 }
@@ -139,82 +139,3 @@ int main(int argc, char* argv[]) {
     std::cout << "👋 Goodbye!" << std::endl;
     return 0;
 }
-
-
-
-// int main() { // test tcp server 
-//     TCPServer server(8080);
-    
-//     // 設定回調函式
-//     server.setConnectionCallback([](int clientId) {
-//         std::cout << "✅ Client " << clientId << " connected!" << std::endl;
-//     });
-    
-//     server.setMessageCallback([&server](int clientId, const std::string& message) {
-//         std::cout << "📨 Message from " << clientId << ": " << message << std::endl;
-        
-//         // Echo back
-//         server.sendMessage(clientId, "Echo: " + message + "\n");
-//     });
-    
-//     server.setDisconnectionCallback([](int clientId) {
-//         std::cout << "📴 Client " << clientId << " disconnected!" << std::endl;
-//     });
-    
-//     server.setErrorCallback([](const std::string& error) {
-//         std::cout << "❌ Server error: " << error << std::endl;
-//     });
-    
-//     // 啟動服務器
-//     if (server.start()) {
-//         std::cout << "Server started successfully!" << std::endl;
-        
-//         // 等待用戶輸入
-//         std::string input;
-//         while (std::getline(std::cin, input)) {
-//             if (input == "quit") break;
-            
-//             if (input == "status") {
-//                 std::cout << "Active clients: " << server.getActiveClientCount() << std::endl;
-//             }
-//         }
-//     }
-    
-//     return 0;
-// }
-// ===== 開發者備註 =====
-/*
-編譯指令:
-g++ -std=c++17 -pthread -I./src \
-    src/main.cpp \
-    src/TradingSystem.cpp \
-    src/core/MatchingEngine.cpp \
-    src/core/Order.cpp \
-    src/core/OrderBook.cpp \
-    src/protocol/FixMessage.cpp \
-    src/protocol/FixSession.cpp \
-    src/protocol/FixMessageBuilder.cpp \
-    src/network/tcp_server.cpp \
-    -o mts_server
-
-測試命令:
-1. 啟動服務器: ./mts_server --port 8080 --test
-2. 連線測試: telnet localhost 8080
-3. 發送 FIX Logon: 8=FIX.4.2|9=73|35=A|49=CLIENT|56=SERVER|34=1|52=20250101-12:00:00|98=0|108=30|10=123|
-4. 發送新訂單: 8=FIX.4.2|9=154|35=D|49=CLIENT|56=SERVER|34=2|52=20250101-12:00:01|11=ORDER123|55=AAPL|54=1|38=100|40=2|44=150.50|59=0|10=456|
-
-架構亮點:
-1. 模組化設計 - 各組件職責清晰
-2. 異步處理 - 避免阻塞主執行緒
-3. 錯誤處理 - 完善的異常捕獲
-4. 資源管理 - 優雅的啟動和關閉
-5. 監控統計 - 實時系統狀態
-6. 可擴展性 - 易於新增功能
-
-面試展示重點:
-1. 展示系統啟動過程
-2. 演示 FIX 協議處理
-3. 說明撮合引擎邏輯
-4. 展現錯誤處理機制
-5. 討論效能優化策略
-*/

@@ -92,7 +92,7 @@ TEST_F(FixMessageTest, FieldOperations) {
 TEST_F(FixMessageTest, BasicParsing) {
     // 注意：這裡使用正確的 checksum
 
-    std::string testFix = "8=FIX.4.2|9=62|35=D|49=CLIENT|56=SERVER|34=1|11=ORDER123|55=AAPL|54=1|38=100|10=050|";
+    std::string testFix = "8=FIX.4.2|9=63|35=A|49=CLIENT|56=SERVER|34=1|52=20250117-12:00:00|98=0|108=30|10=187|";
     // 9=61
     // 35=D       : 5 
     // 49=CLIENT  : 10
@@ -108,13 +108,17 @@ TEST_F(FixMessageTest, BasicParsing) {
     
     // EXPECT_TRUE(msg.isValid());
     EXPECT_EQ(msg.getField(8), "FIX.4.2");      // BeginString
-    EXPECT_EQ(msg.getField(35), "D");           // MsgType
+    EXPECT_EQ(msg.getField(35), "A");           // MsgType
     EXPECT_EQ(msg.getField(49), "CLIENT");      // SenderCompID
     EXPECT_EQ(msg.getField(56), "SERVER");      // TargetCompID
-    EXPECT_EQ(msg.getField(11), "ORDER123");    // ClOrdID
-    EXPECT_EQ(msg.getField(55), "AAPL");        // Symbol
-    EXPECT_EQ(msg.getField(54), "1");           // Side
-    EXPECT_EQ(msg.getField(38), "100");         // OrderQty
+    // EXPECT_EQ(msg.getField(11), "ORDER123");    // ClOrdID
+    EXPECT_EQ(msg.getField(34), "1");    
+    EXPECT_EQ(msg.getField(52), "20250117-12:00:00");    
+    EXPECT_EQ(msg.getField(98), "0");   
+    EXPECT_EQ(msg.getField(108), "30");  
+    // EXPECT_EQ(msg.getField(55), "AAPL");        // Symbol
+    // EXPECT_EQ(msg.getField(54), "1");           // Side
+    // EXPECT_EQ(msg.getField(38), "100");         // OrderQty
 }
 
 TEST_F(FixMessageTest, ParseUnsafe) {

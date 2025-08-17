@@ -1,6 +1,5 @@
-// enhanced_tcp_server.h
-#pragma once
-#include "win_socket.h"
+// tcp_server.h
+#include "tcp_server.h"
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -10,78 +9,35 @@
 #include <mutex>
 #include <string>
 
-/*  
-┌─────────────────┐
-│   TCPServer     │
-├─────────────────┤
-│ • 監聽連線       │
-│ • 管理客戶端     │
-│ • 事件分發       │
-└─────────────────┘
-         │
-    ┌─────┴─────┐
-    │  回調介面  │
-    └─────┬─────┘
-         │
-┌────────┴────────┐
-│   使用者程式     │
-│ (TradingSystem) │
-└─────────────────┘
+namespace mts::tcp_server {
 
-*/
-class TCPServer {
-public:
-    // 回調函式類型定義
-    using ConnectionCallback = std::function<void(int clientSocket)>;
-    using MessageCallback = std::function<void(int clientSocket, const std::string& message)>;
-    using DisconnectionCallback = std::function<void(int clientSocket)>;
-    using ErrorCallback = std::function<void(const std::string& error)>;
-
-private:
-    SOCKET listen_socket_ = INVALID_SOCKET;
-    int port_;
-    std::atomic<bool> running_{false};
-    std::vector<std::thread> client_threads_;
-    
-    // 客戶端管理
-    std::unordered_map<int, SOCKET> active_clients_;
-    std::mutex clients_mutex_;
-    std::atomic<int> next_client_id_{1};
-    
-    // 回調函式
-    ConnectionCallback on_connection_;
-    MessageCallback on_message_;
-    DisconnectionCallback on_disconnection_;
-    ErrorCallback on_error_;
-    
-public:
-    TCPServer(int port) : port_(port) {
+    TCPServer::TCPServer(int port) : port_(port) {
         std::cout << "🌐 Enhanced TCP Server created on port " << port << std::endl;
     }
-    
-    ~TCPServer() {
+    TCPServer::~TCPServer() {
         stop();
     }
     
     // ===== 回調函式設定 =====
-    void setConnectionCallback(ConnectionCallback callback) {
+    void TCPServer::setConnectionCallback(ConnectionCallback callback) {
         on_connection_ = std::move(callback);
     }
-    
-    void setMessageCallback(MessageCallback callback) {
+
+    void TCPServer::setMessageCallback(MessageCallback callback) {
         on_message_ = std::move(callback);
     }
-    
-    void setDisconnectionCallback(DisconnectionCallback callback) {
+
+    void TCPServer::setDisconnectionCallback(DisconnectionCallback callback) {
         on_disconnection_ = std::move(callback);
     }
-    
-    void setErrorCallback(ErrorCallback callback) {
+
+    void TCPServer::setErrorCallback(ErrorCallback callback) {
         on_error_ = std::move(callback);
     }
     
+
     // ===== 服務器生命週期 =====
-    bool start() {
+    bool TCPServer::start() {
         try {
             std::cout << "🚀 Starting Enhanced TCP Server on port " << port_ << std::endl;
             
@@ -149,7 +105,7 @@ public:
         }
     }
     
-    void stop() {
+    void TCPServer::stop() {
         if (!running_.load()) {
             return;
         }
@@ -184,8 +140,10 @@ public:
         std::cout << "✅ Enhanced TCP Server stopped" << std::endl;
     }
     
+
+
     // ===== 訊息發送 =====
-    bool sendMessage(int clientId, const std::string& message) {
+    bool TCPServer::sendMessage(int clientId, const std::string& message) {
         std::lock_guard<std::mutex> lock(clients_mutex_);
         
         auto it = active_clients_.find(clientId);
@@ -210,17 +168,41 @@ public:
         }
     }
     
+    bool TCPServer::sendMessage(SOCKET clientSocket, const std::string& message) {
+        std::lock_guard<std::mutex> lock(clients_mutex_);
+        
+        // 直接使用 socket 發送，避免重複鎖定
+        try {
+            int result = send(clientSocket, message.c_str(), message.length(), 0);
+            if (result == SOCKET_ERROR) {
+                std::cerr << "❌ Send failed for socket " << clientSocket 
+                        << ": " << WSAGetLastError() << std::endl;
+                return false;
+            }
+            
+            std::cout << "📤 Sent to socket " << clientSocket << ": " 
+                    << message.substr(0, 50) << "..." << std::endl;
+            return true;
+            
+        } catch (const std::exception& e) {
+            std::cerr << "❌ Send exception for socket " << clientSocket 
+                    << ": " << e.what() << std::endl;
+            return false;
+        }
+    }
+
+
     // ===== 狀態查詢 =====
-    bool isRunning() const {
+    bool TCPServer::isRunning() const {
         return running_.load();
     }
     
-    size_t getActiveClientCount(){
+    size_t TCPServer::getActiveClientCount(){
         std::lock_guard<std::mutex> lock(clients_mutex_);
         return active_clients_.size();
     }
     
-    std::vector<int> getActiveClientIds(){
+    std::vector<int> TCPServer::getActiveClientIds(){
         std::lock_guard<std::mutex> lock(clients_mutex_);
         std::vector<int> ids;
         for (const auto& pair : active_clients_) {
@@ -229,9 +211,30 @@ public:
         return ids;
     }
     
-private:
+
+    
+    // 新增：根據 clientId 取得 socket
+    SOCKET TCPServer::getClientSocket(int clientId) {
+        std::lock_guard<std::mutex> lock(clients_mutex_); 
+        auto it = active_clients_.find(clientId);
+        return (it != active_clients_.end()) ? it->second : INVALID_SOCKET;
+    }
+    
+    
+    // 新增：根據 socket 取得 clientId（可能用得到）
+    int TCPServer::getClientId(SOCKET clientSocket) {
+        std::lock_guard<std::mutex> lock(clients_mutex_); 
+        for (const auto& pair : active_clients_) {
+            if (pair.second == clientSocket) {
+                return pair.first;
+            }
+        }
+        return -1;
+    }
+    
+
     // ===== 網路處理 =====
-    void accept_loop() {
+    void TCPServer::accept_loop() {
         std::cout << "🔄 Accept loop started" << std::endl;
         
         while (running_) {
@@ -268,7 +271,7 @@ private:
             // 通知新連線
             if (on_connection_) {
                 try {
-                    on_connection_(client_id);
+                    on_connection_(client_socket);
                 } catch (const std::exception& e) {
                     std::cerr << "❌ Connection callback error: " << e.what() << std::endl;
                 }
@@ -281,7 +284,7 @@ private:
         std::cout << "🔄 Accept loop ended" << std::endl;
     }
     
-    void handle_client(int client_id, SOCKET client_socket) {
+    void TCPServer::handle_client(int client_id, SOCKET client_socket) {
         std::cout << "🔗 Client handler started for ID=" << client_id << std::endl;
         
         char buffer[4096];
@@ -316,7 +319,7 @@ private:
                         // 通知訊息回調
                         if (on_message_) {
                             try {
-                                on_message_(client_id, complete_message);
+                                on_message_(client_socket, complete_message);
                             } catch (const std::exception& e) {
                                 std::cerr << "❌ Message callback error: " << e.what() << std::endl;
                             }
@@ -343,7 +346,7 @@ private:
         cleanup_client(client_id, client_socket);
     }
     
-    void cleanup_client(int client_id, SOCKET client_socket) {
+    void TCPServer::cleanup_client(int client_id, SOCKET client_socket) {
         std::cout << "🧹 Cleaning up client " << client_id << std::endl;
         
         // 從活躍客戶端列表中移除
@@ -358,7 +361,7 @@ private:
         // 通知斷線回調
         if (on_disconnection_) {
             try {
-                on_disconnection_(client_id);
+                on_disconnection_(client_socket);
             } catch (const std::exception& e) {
                 std::cerr << "❌ Disconnection callback error: " << e.what() << std::endl;
             }
@@ -368,7 +371,7 @@ private:
     }
     
     // ===== 工具方法 =====
-    void notifyError(const std::string& error) {
+    void TCPServer::notifyError(const std::string& error) {
         std::cerr << "🚨 TCP Server Error: " << error << std::endl;
         
         if (on_error_) {
@@ -379,48 +382,5 @@ private:
             }
         }
     }
-};
 
-// ===== 使用範例 =====
-/*
-int main() {
-    TCPServer server(8080);
-    
-    // 設定回調函式
-    server.setConnectionCallback([](int clientId) {
-        std::cout << "✅ Client " << clientId << " connected!" << std::endl;
-    });
-    
-    server.setMessageCallback([&server](int clientId, const std::string& message) {
-        std::cout << "📨 Message from " << clientId << ": " << message << std::endl;
-        
-        // Echo back
-        server.sendMessage(clientId, "Echo: " + message + "\n");
-    });
-    
-    server.setDisconnectionCallback([](int clientId) {
-        std::cout << "📴 Client " << clientId << " disconnected!" << std::endl;
-    });
-    
-    server.setErrorCallback([](const std::string& error) {
-        std::cout << "❌ Server error: " << error << std::endl;
-    });
-    
-    // 啟動服務器
-    if (server.start()) {
-        std::cout << "Server started successfully!" << std::endl;
-        
-        // 等待用戶輸入
-        std::string input;
-        while (std::getline(std::cin, input)) {
-            if (input == "quit") break;
-            
-            if (input == "status") {
-                std::cout << "Active clients: " << server.getActiveClientCount() << std::endl;
-            }
-        }
-    }
-    
-    return 0;
-}
-*/
+} // namespace mts::tcp_server
