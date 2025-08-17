@@ -49,7 +49,6 @@ private:
     // 客戶端管理
     std::unordered_map<int, SOCKET> active_clients_;
     std::mutex clients_mutex_;
-    std::atomic<int> next_client_id_{1};
     
     // 回調函式
     ConnectionCallback on_connection_;

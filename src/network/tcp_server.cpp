@@ -212,7 +212,7 @@ namespace mts::tcp_server {
     }
     
 
-    
+
     // 新增：根據 clientId 取得 socket
     SOCKET TCPServer::getClientSocket(int clientId) {
         std::lock_guard<std::mutex> lock(clients_mutex_); 
@@ -234,6 +234,7 @@ namespace mts::tcp_server {
     
 
     // ===== 網路處理 =====
+
     void TCPServer::accept_loop() {
         std::cout << "🔄 Accept loop started" << std::endl;
         
@@ -247,26 +248,23 @@ namespace mts::tcp_server {
                 continue;
             }
             
-            // 設定 TCP_NODELAY (關閉 Nagle 演算法，減少延遲)
+            // 設定 TCP 選項...
             char nodelay = 1;
-            setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, 
-                      &nodelay, sizeof(nodelay));
+            setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
             
-            // 設定 SO_KEEPALIVE (保持連線檢測)
             char keepalive = 1;
-            setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, 
-                      &keepalive, sizeof(keepalive));
+            setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
             
-            // 分配客戶端 ID
-            int client_id = next_client_id_.fetch_add(1);
+            // 🔧 修改：直接使用 Socket 編號，不再分配內部 Client ID
+            // int client_id = next_client_id_.fetch_add(1);  // 刪除這行
             
-            // 註冊客戶端
+            // 註冊客戶端（使用 Socket 作為 Key）
             {
                 std::lock_guard<std::mutex> lock(clients_mutex_);
-                active_clients_[client_id] = client_socket;
+                active_clients_[static_cast<int>(client_socket)] = client_socket;  // 🔧 修改
             }
             
-            std::cout << "📞 New client connected: ID=" << client_id << ", Socket=" << client_socket << std::endl;
+            std::cout << "📞 New client connected: Socket=" << client_socket << std::endl;  // 🔧 簡化日誌
             
             // 通知新連線
             if (on_connection_) {
@@ -277,46 +275,44 @@ namespace mts::tcp_server {
                 }
             }
             
-            // 建立客戶端處理執行緒
-            client_threads_.emplace_back(&TCPServer::handle_client, this, client_id, client_socket);
+            // 建立客戶端處理執行緒（使用 Socket 作為識別）
+            client_threads_.emplace_back(&TCPServer::handle_client, this, 
+                                        static_cast<int>(client_socket), client_socket);  // 🔧 修改
         }
         
         std::cout << "🔄 Accept loop ended" << std::endl;
     }
-    
+
     void TCPServer::handle_client(int client_id, SOCKET client_socket) {
-        std::cout << "🔗 Client handler started for ID=" << client_id << std::endl;
+        // 🔧 修改：client_id 現在就是 socket 編號
+        std::cout << "🔗 Client handler started for Socket=" << client_socket << std::endl;
         
         char buffer[4096];
-        std::string message_buffer; // 用於處理不完整的訊息
+        std::string message_buffer;
         
         while (running_) {
             int result = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
             
             if (result > 0) {
-                buffer[result] = '\0'; // 確保字串結尾
-                
-                // 處理接收到的資料
+                buffer[result] = '\0';
                 message_buffer += std::string(buffer, result);
                 
-                // 處理完整的訊息 (以換行符分隔)
+                // 處理完整的訊息...
                 size_t pos = 0;
                 while ((pos = message_buffer.find('\n')) != std::string::npos || 
-                       (pos = message_buffer.find('\r')) != std::string::npos) {
+                    (pos = message_buffer.find('\r')) != std::string::npos) {
                     
                     std::string complete_message = message_buffer.substr(0, pos);
                     message_buffer.erase(0, pos + 1);
                     
                     if (!complete_message.empty()) {
-                        // 清理訊息 (移除多餘的空白字符)
                         complete_message.erase(
                             std::remove(complete_message.begin(), complete_message.end(), '\r'), 
                             complete_message.end()
                         );
                         
-                        std::cout << "📨 Received from client " << client_id << ": " << complete_message << std::endl;
+                        std::cout << "📨 Received from Socket " << client_socket << ": " << complete_message << std::endl;  // 🔧 修改
                         
-                        // 通知訊息回調
                         if (on_message_) {
                             try {
                                 on_message_(client_socket, complete_message);
@@ -327,38 +323,34 @@ namespace mts::tcp_server {
                     }
                 }
                 
-                // 如果緩衝區太大，清理掉
                 if (message_buffer.size() > 8192) {
-                    std::cout << "⚠️ Message buffer too large for client " << client_id << ", clearing" << std::endl;
+                    std::cout << "⚠️ Message buffer too large for Socket " << client_socket << ", clearing" << std::endl;  // 🔧 修改
                     message_buffer.clear();
                 }
                 
             } else if (result == 0) {
-                std::cout << "📴 Client " << client_id << " disconnected normally" << std::endl;
+                std::cout << "📴 Socket " << client_socket << " disconnected normally" << std::endl;  // 🔧 修改
                 break;
             } else {
-                std::cerr << "❌ recv failed for client " << client_id << ": " << WSAGetLastError() << std::endl;
+                std::cerr << "❌ recv failed for Socket " << client_socket << ": " << WSAGetLastError() << std::endl;  // 🔧 修改
                 break;
             }
         }
         
-        // 清理客戶端
         cleanup_client(client_id, client_socket);
     }
-    
+
     void TCPServer::cleanup_client(int client_id, SOCKET client_socket) {
-        std::cout << "🧹 Cleaning up client " << client_id << std::endl;
+        std::cout << "🧹 Cleaning up Socket " << client_socket << std::endl;  // 🔧 修改
         
         // 從活躍客戶端列表中移除
         {
             std::lock_guard<std::mutex> lock(clients_mutex_);
-            active_clients_.erase(client_id);
+            active_clients_.erase(client_id);  // client_id 現在就是 socket 編號
         }
         
-        // 關閉 socket
         closesocket(client_socket);
         
-        // 通知斷線回調
         if (on_disconnection_) {
             try {
                 on_disconnection_(client_socket);
@@ -367,7 +359,7 @@ namespace mts::tcp_server {
             }
         }
         
-        std::cout << "✅ Client " << client_id << " cleanup completed" << std::endl;
+        std::cout << "✅ Socket " << client_socket << " cleanup completed" << std::endl;  // 🔧 修改
     }
     
     // ===== 工具方法 =====
