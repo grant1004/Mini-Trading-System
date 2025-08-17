@@ -118,9 +118,9 @@ public:
     /**
      * @brief 建構函式
      * @param senderCompID 本方的公司識別碼
-     * @param targetCompID 對方的公司識別碼
+     * @param targetCompID 對方的公司識別碼（可選，如果為空則從 LOGON 訊息中提取）
      */
-    FixSession(const std::string& senderCompID, const std::string& targetCompID);
+    FixSession(const std::string& senderCompID, const std::string& targetCompID = "");
     ~FixSession() = default;
     
     // ===== Session 生命週期管理 =====

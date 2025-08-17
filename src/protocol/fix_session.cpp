@@ -61,10 +61,18 @@ bool FixSession::accept(const FixMessage& logonMsg) {
         return false;
     }
     
-    // 檢查 CompID 對應
+    // 提取並設定 CompID
     std::string msgSender = logonMsg.getField(FixMessage::SenderCompID);
     std::string msgTarget = logonMsg.getField(FixMessage::TargetCompID);
     
+    // 如果 targetCompID_ 為空，則從 LOGON 訊息中提取對方的 CompID
+    if (targetCompID_.empty()) {
+        targetCompID_ = msgSender;
+        sessionID_ = generateSessionID(); // 重新生成 SessionID
+        SESSION_DEBUG("Dynamic CompID assignment: target=" + targetCompID_);
+    }
+    
+    // 驗證 CompID 對應關係
     if (msgSender != targetCompID_ || msgTarget != senderCompID_) {
         notifyError("CompID mismatch: expected " + targetCompID_ + "->" + senderCompID_ + 
                    ", got " + msgSender + "->" + msgTarget);
@@ -169,6 +177,13 @@ bool FixSession::processIncomingMessage(const FixMessage& msg) {
     if (!msgSender || !msgTarget) {
         notifyError("Message missing SenderCompID or TargetCompID");
         return false;
+    }
+    
+    // 如果 targetCompID_ 為空且這是第一個訊息，動態設定 CompID
+    if (targetCompID_.empty()) {
+        targetCompID_ = *msgSender;
+        sessionID_ = generateSessionID(); // 重新生成 SessionID
+        SESSION_DEBUG("Dynamic CompID assignment from message: target=" + targetCompID_);
     }
     
     if (*msgSender != targetCompID_ || *msgTarget != senderCompID_) {

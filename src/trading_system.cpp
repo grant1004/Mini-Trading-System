@@ -156,11 +156,11 @@ void TradingSystem::handleNewConnection(SOCKET clientSocket) {
         // 更新統計
         totalConnections_.fetch_add(1);
         
-        // 建立 FIX Session
+        // 建立 FIX Session（使用動態 CompID）
         std::string senderCompID = "SERVER";
-        std::string targetCompID = "CLIENT_" + std::to_string(static_cast<int64_t>(clientSocket));
+        // 不預設 targetCompID，讓 FixSession 從 LOGON 訊息中提取
         
-        auto fixSession = std::make_unique<FixSession>(senderCompID, targetCompID);
+        auto fixSession = std::make_unique<FixSession>(senderCompID);
         
         // 設定 FIX Session 回調
         fixSession->setApplicationMessageHandler(
