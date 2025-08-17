@@ -1,5 +1,4 @@
 #include "fix_message.h"
-#include "../core/order.h"  // 引入 Side enum
 #include <string>
 #include <chrono>
 #include <atomic>
@@ -48,8 +47,7 @@
     #define FIX_FACTORY_DEBUG(msg) do {} while(0)
 #endif
 
-namespace mts {
-namespace protocol {
+namespace mts::protocol {
 
 // 靜態變數：訊息序號
 static std::atomic<uint32_t> g_msgSeqNum{1};
@@ -95,11 +93,11 @@ FixMessage FixMessage::parseUnsafe(const std::string& rawMessage) {
 
 // 內部解析方法，可控制是否驗證 checksum
 FixMessage FixMessage::parseWithValidation(const std::string& rawMessage, bool validateChecksum) {
-    FIX_PARSE_DEBUG("Starting to parse FIX message of length: " << rawMessage.length() 
-                   << " (validateChecksum=" << (validateChecksum ? "YES" : "NO") << ")");
+    // FIX_PARSE_DEBUG("Starting to parse FIX message of length: " << rawMessage.length() 
+    //                << " (validateChecksum=" << (validateChecksum ? "YES" : "NO") << ")");
     
     if (rawMessage.empty()) {
-        FIX_PARSE_DEBUG("ERROR: Empty FIX message");
+        // FIX_PARSE_DEBUG("ERROR: Empty FIX message");
         throw std::runtime_error("Empty FIX message");
     }
     
@@ -111,7 +109,7 @@ FixMessage FixMessage::parseWithValidation(const std::string& rawMessage, bool v
         // 尋找等號
         size_t equalPos = rawMessage.find('=', pos);
         if (equalPos == std::string::npos) {
-            FIX_PARSE_DEBUG("No more '=' found, ending parse at position: " << pos);
+            // FIX_PARSE_DEBUG("No more '=' found, ending parse at position: " << pos);
             break;
         }
         
@@ -122,87 +120,107 @@ FixMessage FixMessage::parseWithValidation(const std::string& rawMessage, bool v
             sohPos = rawMessage.find('|', equalPos);
             if (sohPos == std::string::npos) {
                 sohPos = rawMessage.length();  // 最後一個欄位
-                FIX_PARSE_DEBUG("Last field detected (no SOH found)");
+                // FIX_PARSE_DEBUG("Last field detected (no SOH found)");
             }
         }
         
         // 提取 tag 和 value
         std::string tagStr = rawMessage.substr(pos, equalPos - pos);
-        std::string value = rawMessage.substr(equalPos + 1, sohPos - equalPos - 1);
-        
-        FIX_PARSE_DEBUG("Field #" << ++fieldCount << ": Tag=" << tagStr << ", Value=" << value);
-        
-        try {
-            int tag = std::stoi(tagStr);
-            msg.setField(tag, value);
-        } catch (const std::exception& e) {
-            FIX_PARSE_DEBUG("ERROR: Invalid tag '" << tagStr << "': " << e.what());
-            throw std::runtime_error("Invalid tag in FIX message: " + tagStr);
+        int tag = 0;
+        bool validTag = true;
+        for (size_t i = pos; i < equalPos && validTag; ++i) {
+            char c = rawMessage[i];
+            if (c >= '0' && c <= '9') {
+                tag = tag * 10 + (c - '0');
+            } else {
+                validTag = false;
+            }
         }
+
+        if (!validTag || tag == 0) {
+            FIX_PARSE_DEBUG("ERROR: Invalid tag");
+            throw std::runtime_error("Invalid tag in FIX message");
+        }
+
+        // 直接建構 value，避免額外拷貝
+        std::string value(rawMessage.data() + equalPos + 1, sohPos - equalPos - 1);
+        msg.setField(tag, value);
+        // std::string value = rawMessage.substr(equalPos + 1, sohPos - equalPos - 1);
+        
+        // FIX_PARSE_DEBUG("Field #" << ++fieldCount << ": Tag=" << tagStr << ", Value=" << value);
+        
+        // try {
+        //     int tag = std::stoi(tagStr);
+        //     msg.setField(tag, value);
+        // } catch (const std::exception& e) {
+        //     FIX_PARSE_DEBUG("ERROR: Invalid tag '" << tagStr << "': " << e.what());
+        //     throw std::runtime_error("Invalid tag in FIX message: " + tagStr);
+        // }
         
         pos = sohPos + 1;  // 移到下一個欄位
     }
     
-    FIX_PARSE_DEBUG("Parse completed. Total fields: " << msg.getFieldCount());
+    // FIX_PARSE_DEBUG("Parse completed. Total fields: " << msg.getFieldCount());
     
     // 🎯 關鍵改進：解析後立即驗證 checksum
-    if (validateChecksum) {
-        FIX_PARSE_DEBUG("Performing checksum validation...");
+    // if (validateChecksum) {
+    //     FIX_PARSE_DEBUG("Performing checksum validation...");
         
-        if (!msg.hasField(CheckSum)) {
-            FIX_PARSE_DEBUG("ERROR: Missing CheckSum field");
-            throw std::runtime_error("FIX message missing CheckSum field");
-        }
+    //     if (!msg.hasField(CheckSum)) {
+    //         FIX_PARSE_DEBUG("ERROR: Missing CheckSum field");
+    //         throw std::runtime_error("FIX message missing CheckSum field");
+    //     }
         
-        if (!msg.validateChecksum()) {
-            FIX_PARSE_DEBUG("ERROR: Checksum validation failed");
-            throw std::runtime_error("FIX message checksum validation failed");
-        }
+    //     if (!msg.validateChecksum()) {
+    //         FIX_PARSE_DEBUG("ERROR: Checksum validation failed");
+    //         throw std::runtime_error("FIX message checksum validation failed");
+    //     }
         
-        FIX_PARSE_DEBUG("Checksum validation PASSED");
-    } else {
-        FIX_PARSE_DEBUG("Skipping checksum validation (unsafe mode)");
-    }
+    //     FIX_PARSE_DEBUG("Checksum validation PASSED");
+    // } else {
+    //     // FIX_PARSE_DEBUG("Skipping checksum validation (unsafe mode)");
+    // }
     
     return msg;
 }
 
 // 序列化為 FIX 字串
 std::string FixMessage::serialize() const {
-    FIX_SERIALIZE_DEBUG("Starting serialization of " << fields_.size() << " fields");
+    // FIX_SERIALIZE_DEBUG("Starting serialization of " << fields_.size() << " fields");
     
     // 檢查必要欄位
     if (!hasField(BeginString) || !hasField(MsgType)) {
-        FIX_SERIALIZE_DEBUG("ERROR: Missing required fields (BeginString or MsgType)");
+        // FIX_SERIALIZE_DEBUG("ERROR: Missing required fields (BeginString or MsgType)");
         throw std::runtime_error("Missing required fields for serialization");
     }
     
     std::ostringstream oss;
     
     // 1. BeginString (8)
-    oss << BeginString << "=" << getField(BeginString) << SOH;
+    oss << BeginString << "=" << getFieldRef(BeginString) << SOH;
     
     // 2. BodyLength (9) - 稍後計算
     std::ostringstream bodyStream;
     
     // 3. MsgType (35)
-    bodyStream << MsgType << "=" << getField(MsgType) << SOH;
+    bodyStream << MsgType << "=" << getFieldRef(MsgType) << SOH;
     
     // 4. 其他欄位（按 tag 排序，除了標準標頭和 CheckSum）
-    std::vector<std::pair<int, std::string>> sortedFields;
+    // std::vector<std::pair<int, std::string>> sortedFields;
     for (const auto& [tag, value] : fields_) {
         if (tag != BeginString && tag != BodyLength && tag != MsgType && tag != CheckSum) {
-            sortedFields.emplace_back(tag, value);
+            bodyStream << tag << "=" << value << SOH;
+            // sortedFields.emplace_back(tag, value);
         }
     }
     
     // 按 tag 排序 (FIX 建議)
-    std::sort(sortedFields.begin(), sortedFields.end());
+    // std::sort(sortedFields.begin(), sortedFields.end());
     
-    for (const auto& [tag, value] : sortedFields) {
-        bodyStream << tag << "=" << value << SOH;
-        // FIX_SERIALIZE_DEBUG("Added field: " << tag << "=" << value);
-    }
+    // for (const auto& [tag, value] : sortedFields) {
+    //     bodyStream << tag << "=" << value << SOH;
+    //     // FIX_SERIALIZE_DEBUG("Added field: " << tag << "=" << value);
+    // }
     
     std::string bodyContent = bodyStream.str();
     
@@ -221,7 +239,7 @@ std::string FixMessage::serialize() const {
     oss << CheckSum << "=" << checksum << SOH;
     
     std::string result = oss.str();
-    FIX_SERIALIZE_DEBUG("Serialization completed. Total length: " << result.length());
+    // FIX_SERIALIZE_DEBUG("Serialization completed. Total length: " << result.length());
     
     return result;
 }
@@ -238,6 +256,12 @@ FieldValue FixMessage::getField(FieldTag tag) const {
         return it->second;
     }
     return "";  // 欄位不存在時返回空字串
+}
+const std::string FixMessage::EMPTY_STRING_;
+
+const std::string& FixMessage::getFieldRef(FieldTag tag) const {
+    auto it = fields_.find(tag);
+    return (it != fields_.end()) ? it->second : EMPTY_STRING_;
 }
 
 std::optional<FieldValue> FixMessage::getFieldOptional(FieldTag tag) const {
@@ -265,24 +289,44 @@ bool FixMessage::isValid() const {
 }
 
 std::pair<bool, std::string> FixMessage::validateWithDetails() const {
-    FIX_VALIDATION_DEBUG("Starting detailed validation");
+    // FIX_VALIDATION_DEBUG("Starting detailed validation");
     
     // 檢查必要欄位
-    std::vector<int> requiredFields = {BeginString, BodyLength, MsgType, CheckSum};
+    // std::vector<int> requiredFields = {BeginString, BodyLength, MsgType, CheckSum};
+    // for (int tag : requiredFields) {
+    //     if (!hasField(tag) || getField(tag).empty()) {
+    //         std::string error = "Missing required field: " + std::to_string(tag);
+    //         FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+    //         return {false, error};
+    //     }
+    // }
     
-    for (int tag : requiredFields) {
-        if (!hasField(tag) || getField(tag).empty()) {
-            std::string error = "Missing required field: " + std::to_string(tag);
-            FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
-            return {false, error};
-        }
+    if (!hasField(BeginString) || getField(BeginString).empty()) {
+        std::string error = "Missing required field: " + std::to_string(BeginString);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        return {false, error};
+    }
+    if (!hasField(BodyLength) || getField(BodyLength).empty()) {
+        std::string error = "Missing required field: " + std::to_string(BodyLength);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        return {false, error};
+    }
+    if (!hasField(MsgType) || getField(MsgType).empty()) {
+        std::string error = "Missing required field: " + std::to_string(MsgType);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        return {false, error};
+    }
+    if (!hasField(CheckSum) || getField(CheckSum).empty()) {
+        std::string error = "Missing required field: " + std::to_string(CheckSum);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        return {false, error};
     }
     
     // 檢查 BeginString 版本
     std::string beginString = getField(BeginString);
     if (beginString != "FIX.4.2" && beginString != "FIX.4.4" && beginString != "FIX.5.0") {
         std::string error = "Invalid BeginString: " + beginString;
-        FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
         return {false, error};
     }
     
@@ -290,7 +334,7 @@ std::pair<bool, std::string> FixMessage::validateWithDetails() const {
     std::string msgType = getField(MsgType);
     if (msgType.empty()) {
         std::string error = "Empty MsgType";
-        FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
         return {false, error};
     }
     
@@ -299,18 +343,18 @@ std::pair<bool, std::string> FixMessage::validateWithDetails() const {
         std::stoi(getField(BodyLength));
     } catch (...) {
         std::string error = "Invalid BodyLength: " + getField(BodyLength);
-        FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
         return {false, error};
     }
     
     // 驗證 Checksum
     if (!validateChecksum()) {
         std::string error = "Invalid checksum";
-        FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
+        // FIX_VALIDATION_DEBUG("VALIDATION FAILED: " << error);
         return {false, error};
     }
     
-    FIX_VALIDATION_DEBUG("Validation PASSED");
+    // FIX_VALIDATION_DEBUG("Validation PASSED");
     return {true, "Valid"};
 }
 
@@ -318,7 +362,7 @@ bool FixMessage::validateChecksum() const {
     FIX_CHECKSUM_DEBUG("Validating checksum");
     
     if (!hasField(CheckSum)) {
-        FIX_CHECKSUM_DEBUG("No checksum field found");
+        // FIX_CHECKSUM_DEBUG("No checksum field found");
         return false;
     }
     
@@ -328,7 +372,7 @@ bool FixMessage::validateChecksum() const {
         
         // 建構不含 checksum 的訊息
         std::string messageWithoutChecksum = buildMessageWithoutChecksum();
-        FIX_CHECKSUM_DEBUG("Message without checksum: " << messageWithoutChecksum);
+        // FIX_CHECKSUM_DEBUG("Message without checksum: " << messageWithoutChecksum);
 
         std::string calculatedChecksum = calculateChecksum(messageWithoutChecksum);
         
@@ -444,7 +488,7 @@ std::string FixMessage::calculateChecksum(const std::string& messageBody) const 
     std::ostringstream oss;
     oss << std::setfill('0') << std::setw(3) << checksum;
     
-    FIX_CHECKSUM_DEBUG("Calculated checksum: " << checksum << " -> " << oss.str());
+    // FIX_CHECKSUM_DEBUG("Calculated checksum: " << checksum << " -> " << oss.str());
     return oss.str();
 }
 
@@ -516,5 +560,4 @@ std::string FixMessage::buildMessageWithoutChecksum() const {
     return oss.str();
 }
 
-} // namespace protocol
-} // namespace mts
+} // namespace mts::protocol

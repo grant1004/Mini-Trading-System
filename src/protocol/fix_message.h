@@ -2,6 +2,7 @@
 // 1. fix_message.h - 純粹的 FIX 協議載體
 // ============================================================================
 #pragma once
+#include "../core/order.h"  // 引入 Side enum
 #include <string>
 #include <map>
 #include <queue>
@@ -11,10 +12,9 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <iostream>
 
-namespace mts {
-
-namespace protocol {
+namespace mts::protocol {
 
 using FieldTag = int;
 using FieldValue = std::string;
@@ -50,6 +50,7 @@ public:
     };
 
 private:
+    // std::map<FieldTag, FieldValue> fields_;
     std::map<FieldTag, FieldValue> fields_;
 
 public:
@@ -69,12 +70,13 @@ public:
     // ===== 欄位操作 =====
     void setField(FieldTag tag, const FieldValue& value);
     FieldValue getField(FieldTag tag) const;
+    const std::string& getFieldRef(FieldTag tag) const;
     std::optional<FieldValue> getFieldOptional(FieldTag tag) const;
     bool hasField(FieldTag tag) const;
     void removeField(FieldTag tag);
     
     // 取得所有欄位（用於偵錯）
-    const std::map<FieldTag, FieldValue>& getAllFields() const { return fields_; }
+    const std::map<FieldTag, FieldValue> & getAllFields() const { return fields_; }
 
     // ===== 基本驗證 =====
     bool isValid() const;
@@ -96,6 +98,7 @@ public:
     size_t getFieldCount() const { return fields_.size(); }
 
 private:
+    static const std::string EMPTY_STRING_;
     // 內部輔助方法
     std::string calculateChecksum(const std::string& messageBody) const;
     std::string getCurrentFixTimestamp() const;
@@ -107,6 +110,4 @@ private:
 };
 
 
-} // namespace mts::protocol
-
-} // namespace mts
+} // namespace  mts::protocol

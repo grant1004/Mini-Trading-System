@@ -4,11 +4,10 @@
 #pragma once
 #include "fix_message.h"
 #include "../core/order.h"
+#include <string>
 
-namespace mts {
-namespace protocol {
+namespace mts::protocol {
 
-// 🏗️ FIX 訊息建構器 - 處理業務邏輯
 class FixMessageBuilder {
 public:
     // Session 資訊
@@ -61,3 +60,5 @@ private:
     static char sideToFixChar(mts::core::Side side);
     static char tifToFixChar(mts::core::TimeInForce tif);
 };
+
+} // namespace mts::protocol
