@@ -41,6 +41,7 @@ void simulateTestClient() {
     std::cout << "🧪 Test client simulation completed" << std::endl;
 }
 
+
 int main(int argc, char* argv[]) {
     std::cout << "╔══════════════════════════════════════════════════════════════════════════════╗" << std::endl;
     std::cout << "║                           MTS - Mini Trading System                          ║" << std::endl;
@@ -139,6 +140,48 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+
+
+// int main() { // test tcp server 
+//     TCPServer server(8080);
+    
+//     // 設定回調函式
+//     server.setConnectionCallback([](int clientId) {
+//         std::cout << "✅ Client " << clientId << " connected!" << std::endl;
+//     });
+    
+//     server.setMessageCallback([&server](int clientId, const std::string& message) {
+//         std::cout << "📨 Message from " << clientId << ": " << message << std::endl;
+        
+//         // Echo back
+//         server.sendMessage(clientId, "Echo: " + message + "\n");
+//     });
+    
+//     server.setDisconnectionCallback([](int clientId) {
+//         std::cout << "📴 Client " << clientId << " disconnected!" << std::endl;
+//     });
+    
+//     server.setErrorCallback([](const std::string& error) {
+//         std::cout << "❌ Server error: " << error << std::endl;
+//     });
+    
+//     // 啟動服務器
+//     if (server.start()) {
+//         std::cout << "Server started successfully!" << std::endl;
+        
+//         // 等待用戶輸入
+//         std::string input;
+//         while (std::getline(std::cin, input)) {
+//             if (input == "quit") break;
+            
+//             if (input == "status") {
+//                 std::cout << "Active clients: " << server.getActiveClientCount() << std::endl;
+//             }
+//         }
+//     }
+    
+//     return 0;
+// }
 // ===== 開發者備註 =====
 /*
 編譯指令:

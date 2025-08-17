@@ -88,12 +88,43 @@ bool TradingSystem::initializeMatchingEngine() {
 
 bool TradingSystem::initializeTcpServer() {
     try {
+        std::cout << "🌐 初始化增強版 TCP 服務器..." << std::endl;
+        
+        // 建立增強版 TCP 服務器
         tcpServer_ = std::make_unique<TCPServer>(serverPort_);
         
-        // 由於你的 TCPServer 是簡單的 echo server，我們需要修改它
-        // 這裡假設我們有一個修改版本，能夠處理多客戶端
+        // 設定連線回調
+        tcpServer_->setConnectionCallback([this](int clientId) {
+            std::cout << "🎉 新客戶端連線: " << clientId << std::endl;
+            handleNewConnection(clientId);
+        });
         
-        return tcpServer_->start();
+        // 設定訊息回調 - 這是關鍵!
+        tcpServer_->setMessageCallback([this](int clientId, const std::string& message) {
+            std::cout << "📨 收到客戶端 " << clientId << " 訊息: " << message << std::endl;
+            handleClientMessage(clientId, message);
+        });
+        
+        // 設定斷線回調
+        tcpServer_->setDisconnectionCallback([this](int clientId) {
+            std::cout << "📴 客戶端斷線: " << clientId << std::endl;
+            handleClientDisconnection(clientId);
+        });
+        
+        // 設定錯誤回調
+        tcpServer_->setErrorCallback([this](const std::string& error) {
+            std::cerr << "🚨 TCP 服務器錯誤: " << error << std::endl;
+        });
+        
+        // 啟動服務器
+        bool success = tcpServer_->start();
+        if (success) {
+            std::cout << "✅ TCP 服務器啟動成功，監聽 port " << serverPort_ << std::endl;
+        } else {
+            std::cerr << "❌ TCP 服務器啟動失敗" << std::endl;
+        }
+        
+        return success;
         
     } catch (const std::exception& e) {
         std::cerr << "TCP Server initialization error: " << e.what() << std::endl;
