@@ -24,6 +24,9 @@ option(ENABLE_FIX_SERIALIZE_DEBUG "Enable FIX serialization debug output" ON)
 option(ENABLE_FIX_VALIDATION_DEBUG "Enable FIX validation debug output" ON)
 option(ENABLE_FIX_FACTORY_DEBUG "Enable FIX factory debug output" ON)
 
+# 🔧 新增：MatchingEngine 除錯選項
+option(ENABLE_MATCHING_DEBUG "Enable MatchingEngine debug output" ON)
+
 # Windows 特定設定
 if(WIN32)
     add_definitions(-D_WIN32_WINNT=0x0601)  # Windows 7 以上
@@ -78,6 +81,12 @@ endif()
 if(ENABLE_FIX_FACTORY_DEBUG)
     add_definitions(-DENABLE_FIX_FACTORY_DEBUG)
     message(STATUS "  - Factory debug: ON")
+    set(ANY_DEBUG_ENABLED TRUE)
+endif()
+
+if(ENABLE_MATCHING_DEBUG)
+    add_definitions(-DENABLE_MATCHING_DEBUG)
+    message(STATUS "  - MatchingEngine debug: ON")
     set(ANY_DEBUG_ENABLED TRUE)
 endif()
 
