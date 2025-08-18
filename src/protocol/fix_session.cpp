@@ -146,6 +146,38 @@ void FixSession::forceDisconnect() {
     setState(SessionState::Disconnected);
 }
 
+void FixSession::resetForNewLogin() {
+    SESSION_DEBUG("Resetting session for new login");
+    
+    // 重置狀態和 CompID 綁定
+    setState(SessionState::Disconnected);
+    targetCompID_.clear();  // 🎯 關鍵：清空目標 CompID，允許重新綁定
+    
+    // 重置序號
+    outgoingSeqNum_.store(1);
+    expectedIncomingSeqNum_.store(1);
+    
+    // 清空訊息佇列
+    std::lock_guard<std::mutex> lock(queueMutex_);
+    std::queue<FixMessage> empty;
+    outgoingMessageQueue_.swap(empty);
+    
+    // 重置時間戳
+    updateHeartbeatTimers();
+    
+    // 重置統計
+    messagesReceived_.store(0);
+    messagesSent_.store(0);
+    
+    SESSION_DEBUG("Session reset completed, ready for new login");
+}
+
+bool FixSession::canAcceptNewLogin() const {
+    return (state_ == SessionState::Disconnected || 
+            state_ == SessionState::LoggedOut);
+}
+
+
 // ===== 訊息處理 =====
 bool FixSession::processIncomingMessage(const std::string& rawMessage) {
     try {
@@ -179,12 +211,23 @@ bool FixSession::processIncomingMessage(const FixMessage& msg) {
         return false;
     }
     
-    // 如果 targetCompID_ 為空且這是第一個訊息，動態設定 CompID
-    if (targetCompID_.empty()) {
-        targetCompID_ = *msgSender;
-        sessionID_ = generateSessionID(); // 重新生成 SessionID
-        SESSION_DEBUG("Dynamic CompID assignment from message: target=" + targetCompID_);
+    // 🎯 修改：如果是 Logon 訊息且 Session 可以接受新登入，允許重新綁定 CompID
+    auto msgType = msg.getMsgType();
+
+    if (!msgType) {
+        notifyError("Message missing MsgType");
+        return false;
     }
+    
+    if (msgType && *msgType == FixMessage::Logon && canAcceptNewLogin()) {
+        // 允許重新設定 CompID
+        if (targetCompID_.empty() || targetCompID_ != *msgSender) {
+            targetCompID_ = *msgSender;
+            sessionID_ = generateSessionID(); // 重新生成 SessionID
+            SESSION_DEBUG("CompID rebound for new login: target=" + targetCompID_);
+        } // if 
+    } // if 
+    
     
     if (*msgSender != targetCompID_ || *msgTarget != senderCompID_) {
         notifyError("CompID mismatch in message");
@@ -201,12 +244,6 @@ bool FixSession::processIncomingMessage(const FixMessage& msg) {
         expectedIncomingSeqNum_.store(*seqNum + 1);
     }
     
-    // 根據訊息類型處理
-    auto msgType = msg.getMsgType();
-    if (!msgType) {
-        notifyError("Message missing MsgType");
-        return false;
-    }
     
     if (msg.isAdminMessage()) {
         return handleAdminMessage(msg);
@@ -361,6 +398,7 @@ void FixSession::handleLogout(const FixMessage& msg) {
     if (state_ == SessionState::PendingLogout) {
         // 我們發起的登出收到回應
         setState(SessionState::LoggedOut);
+        resetForNewLogin();
         SESSION_DEBUG("Logout confirmed");
     } else if (state_ == SessionState::LoggedIn) {
         // 對方發起登出，回應並斷線
@@ -371,7 +409,9 @@ void FixSession::handleLogout(const FixMessage& msg) {
         
         sendAdminMessage(logoutResp);
         setState(SessionState::LoggedOut);
+        resetForNewLogin();
         SESSION_DEBUG("Logout response sent");
+
     } else {
         SESSION_DEBUG("Logout message in unexpected state: " + getStateString());
     }

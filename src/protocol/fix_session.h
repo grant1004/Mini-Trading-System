@@ -165,6 +165,17 @@ public:
      * 不發送 Logout 訊息，直接變為 Disconnected 狀態
      */
     void forceDisconnect();
+
+    /**
+     * @brief 重置 Session 以支援新的 CompID 登入
+     * 用於同一個 TCP 連線中 Logout 後重新登入
+     */
+    void resetForNewLogin();
+    
+    /**
+     * @brief 檢查是否可以接受新的登入
+     */
+    bool canAcceptNewLogin() const;
     
     // ===== 訊息處理 =====
     
